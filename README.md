@@ -1,6 +1,5 @@
-EURYDICE: **E**val**U**ating **R**adial velocit**Y** mo**D**els us**I**ng **C**ross-validation and Gaussian proc**E**sses 
+EURYDICE: A WIP to create a package that will perform cross-validations for radial velocity signal models with Gaussian processes.
 
-A WIP to create a package that will perform cross-validations for radial velocity signal models with Gaussian processes 💃🕺
 For more detailed documentation, start [here](https://eurydice.readthedocs.io/en/latest/)
 
 [![PyPI version](https://badge.fury.io/py/eurydice.svg)](https://badge.fury.io/py/eurydice)
