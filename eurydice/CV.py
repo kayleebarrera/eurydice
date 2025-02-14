@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 import eurydice.kepler as kepler
-import plot
-import kernel
+import eurydice.plot as plot
+import eurydice.kernel as kernel
 import matplotlib.pyplot as plt
 
 
