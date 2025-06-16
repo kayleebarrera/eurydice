@@ -1,14 +1,14 @@
 
-.. image:: eurydicebratlogo.png
-   :width: 150px
-   :height: 100px
+.. image:: eurydice_logo_text.png
+   :width: 300px
+   :height: 200px
    :align: center
 
 
 eurydice
 ====================================
 
-Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on radial velocity signal models using Gaussian processes.
+Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 
 
 ``eurydice`` is actively being developed in a `public repository on GitHub <https://github.com/kaybarr4/eurydice>`_. If you find a bug, want to request a feature, etc. please
 create an `issue on GitHub <https://github.com/kaybarr4/eurydice/issues>`_.  
