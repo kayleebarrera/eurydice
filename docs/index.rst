@@ -1,7 +1,7 @@
 
 .. image:: eurydice_logo_text.png
    :width: 300px
-   :height: 200px
+   :height: 100px
    :align: center
 
 
