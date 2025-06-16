@@ -5,8 +5,6 @@
    :align: center
 
 
-eurydice
-====================================
 
 Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 
 
