@@ -1,9 +1,18 @@
+eurydice
+========
+
+.. raw:: html
+
+   <style>
+     h1:first-of-type {
+       display: none;
+     }
+   </style>
 
 .. image:: eurydice_logo_text.png
    :width: 300px
    :height: 100px
    :align: center
-
 
 
 Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 

@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath("./../eurydice"))
 # -- Project information -----------------------------------------------------
 
 project = "eurydice"
-copyright = "2024, Kaylee Barrera"
+copyright = "2025 Kaylee Barrera"
 author = "Kaylee Barrera"
 root_doc = "index"
 
@@ -54,6 +54,6 @@ html_theme = "sphinx_book_theme"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
-html_title = "eurydice"
+html_title = "eurydice documentation"
 html_favicon = "_static/eurydice_favicon.png"
-html_logo = "_static/eurydice_icon.png"
+html_logo = "_static/eurydice_logo.png"
