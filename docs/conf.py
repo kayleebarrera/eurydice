@@ -56,4 +56,4 @@ html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
 html_title = "eurydice documentation"
 html_favicon = "_static/eurydice_favicon.png"
-html_logo = "_static/eurydice_logo.png"
+html_logo = "_static/eurydice_logo_color.png"
