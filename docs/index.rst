@@ -14,6 +14,9 @@ eurydice
    :height: 100px
    :align: center
 
+.. raw:: html
+
+   <div style="margin-top: 20px;"></div>
 
 Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 
 

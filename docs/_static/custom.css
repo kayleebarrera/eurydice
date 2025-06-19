@@ -1,0 +1,13 @@
+/* logo in the sidebar/header */
+.bd-sidebar .navbar-brand img {
+    height: 75px;       
+    width: auto;         
+    object-fit: contain; 
+    margin-bottom: 1rem;  
+    display: block;  
+}
+
+/* spacing in index page 
+body.index .bd-content {
+    padding-top: 220px;
+} */
