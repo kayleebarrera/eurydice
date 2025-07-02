@@ -58,6 +58,16 @@ html_title = "eurydice documentation"
 html_favicon = "_static/eurydice_favicon.png"
 html_logo = "_static/eurydice_logo_color.svg"
 
+html_theme_options = {
+    "path_to_docs": "docs",
+    "repository_url": "https://github.com/kaybarr4/eurydice",
+    "repository_branch": "main",
+    "use_edit_page_button": True,
+    "use_issues_button": True,
+    "use_repository_button": True,
+    "use_download_button": True,
+}
+
 
 def setup(app):
     app.add_css_file("custom.css")

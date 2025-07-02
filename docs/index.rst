@@ -18,13 +18,21 @@ eurydice
 
    <div style="margin-top: 20px;"></div>
 
+.. admonition:: July 2025 Note
+
+   (👋 If you're here from my poster at ERES or EPRV6, thanks for stopping by!)
+
+   I'm currently in the process of drafting a paper on ``eurydice`` and our first test case, which means there will probably be a lot of changes coming soon as I refurbish my current code. 
+
+   Any particular suggestions or feedback? Feel free to reach out!
+
 Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 
 
 ``eurydice`` is actively being developed in a `public repository on GitHub <https://github.com/kaybarr4/eurydice>`_. If you find a bug, want to request a feature, etc. please
 create an `issue on GitHub <https://github.com/kaybarr4/eurydice/issues>`_.  
 
 
-User Guide:
+User Guide
 +++++++++++
 
 .. toctree::
@@ -36,7 +44,7 @@ User Guide:
 
 
 
-Changelog:
+Changelog
 ++++++++++
 
 **0.4 (2024-8-16)**
