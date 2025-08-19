@@ -2,8 +2,7 @@
 
 Kernel 
 =======================
-This module contains the abstract base class for defining kernels, a covariance matrix building helper function, and the defaultKernel class
-
+This module contains the abstract base class for defining kernels and some included Kernel classes.
 
 .. automodule:: eurydice.kernel
     :members:

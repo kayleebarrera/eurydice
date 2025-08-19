@@ -26,7 +26,7 @@ eurydice
 
    Any particular suggestions or feedback? Feel free to reach out!
 
-Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 
+Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process models of radial velocity data. 
 
 ``eurydice`` is actively being developed in a `public repository on GitHub <https://github.com/kaybarr4/eurydice>`_. If you find a bug, want to request a feature, etc. please
 create an `issue on GitHub <https://github.com/kaybarr4/eurydice/issues>`_.  
@@ -39,13 +39,19 @@ User Guide
    :maxdepth: 2
 
    installation 
-   tutorial
+   tutorials
    api
-
 
 
 Changelog
 ++++++++++
+
+**0.5 (2025-7-26)**
+she's back!
+- added input module to easily format data for eurydice's CV method
+- added QuasiPeriodic and SquaredExponential kernels to kernel module
+- adjusted a lot of CrossValiation's methods to make it easier to use
+- updated plotting methods for more customization and an easy multipanel plot for CV results
 
 **0.4 (2024-8-16)**
 

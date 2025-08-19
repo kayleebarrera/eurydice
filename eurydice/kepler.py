@@ -14,7 +14,7 @@ def kepler_solver(M_anom, ecc, tolerance=1e-7):
         tolerance (float, optional): absolute tolerance of iterative computatiom ('exit condition'). Defaults to 1e-7.
 
     Return:
-        E_anom (np.array): array of eccentric anomalies
+        (np.array): array of eccentric anomalies
     """
 
     def f(E_anom, ecc, M_enom):
@@ -60,7 +60,7 @@ def transit_to_periastron(t_transit, period, ecc, omega):
         omega (float): longitude of periastron (radians)
 
     Returns:
-        t_periastron (float): time of periastron passage
+        (float): time of periastron passage
 
     """
     f = np.pi / 2 - omega

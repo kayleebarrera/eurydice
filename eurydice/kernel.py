@@ -1,57 +1,184 @@
 import numpy as np
 from abc import ABC, abstractmethod
+from scipy.spatial.distance import cdist
 
 
-##### KERNEL HELPER FUNCTION ####
-def build_covariance_matrix(kernel, p1, p2):
-    """
-    Computes the covariance matrix between two sets of points given a kernel object
-
-    Args:
-        p1 (np.array): array of first set of points, length N
-        p2 (np.array): array of second set of points, length M
-        kernel (object): describes the covariance between two points
-
-    Return:
-        cov_matrix (np.array): an array of size NxM filled with values computed by kernel
-    """
-    cov_matrix = np.zeros((len(p1), len(p2)))
-
-    for i in range(len(p1)):
-        for j in range(len(p2)):
-            cov_matrix[i][j] = kernel.calc_value(p1[i], p2[j])
-
-    return cov_matrix
-
-
-##### ABSTRACT KERNEL CLASS #####
 class Kernel(ABC):
     """
-    An abstract base class to set up any kernel functions to use in CrossValidation object.
+    An abstract base class to set up any kernel function to use in CrossValidation object. All kernel objects inherit from this class.
+
+    Note:
+        To implement your own custom kernel, create a class that inherits from this class.
     """
 
-    def calc_covmatrix(self, p1, p2):
-        """Evaluate the covariance matrix with the kernel function at two given sets of independent coordinates."""
-        return build_covariance_matrix(self, p1, p2)
-
     @abstractmethod
-    def calc_value(self, x1, x2):
-        """Evaluate the kernel at a pair of input coordinates"""
+    def name(self):
+        pass
+
+    def calc_covmatrix(self, x1, x2, errors, **kwargs):
+        """
+        Calculate the full covariance matrix between x1 and x2
+
+        kwargs can include inst1, inst2 for handling multi-instrument kernels.
+        """
         pass
 
 
-##### DEFAULT KERNEL: SQ EXP #####
-class defaultKernel(Kernel):
+class SqExp(Kernel):
     """
-    A default kernel that CrossValidation will use if no other kernel function is given.
-    Has an amplitude of 1 and a characteristic length-scale of 5 (days)
+    The squared exponential kernel
+    .
+    An element, :math:`C_{ij}`, of the squared exoponential kernel matrix is:
+
+    .. math::
+
+        C_{ij} = \\eta_{amp}^2 * exp( \\frac{ -|t_i - t_j|^2 }{ \\eta_{length}^2 } )
+
+    Args:
+        hyperparams (dict): dictionary of the GP hyperparameters
+            of this kernel containing ['length*'] and ['amp*'] terms.
     """
 
-    def __init__(self):
-        self.amplitude = 1
-        self.lengthscale = 5
+    @property
+    def name(self):
+        return "SquaredExponential"
 
-    def calc_value(self, x1, x2):
-        return self.amplitude**2 * np.exp(
-            -((x1 - x2) ** 2) / (2 * (self.lengthscale) ** 2)
+    def __init__(self, hyperparams):
+        self.covmatrix = None
+        self.hparams = {}
+
+        assert (
+            len(hyperparams) == 2
+        ), "SqExp requires exactly 2 hyperparameters with names 'length*' and 'amp*'."
+
+        for key, val in hyperparams.items():
+            if key.startswith("length"):
+                self.hparams["length"] = val
+            elif key.startswith("amp"):
+                self.hparams["amp"] = val
+
+        if "length" not in self.hparams or "amp" not in self.hparams:
+            raise ValueError(
+                "SqExpKernel requires hyperparameters 'length*' and 'amp*'."
+            )
+
+    def __repr__(self):
+        length = self.hparams["length"]
+        amp = self.hparams["amp"]
+        return "SquaredExponential Kernel with length: {}, amp: {}".format(length, amp)
+
+    def calc_covmatrix(self, x1, x2, errors=0.0, **kwargs):
+        """
+        Compute the full covariance matrix between x1 and x2
+
+        Args:
+            x1, x2 (np.arrays): Points to calculate covariance matrix at.
+            errors (float or np.array): If the covariance matrix is non-square (x1 and x2 are not the same length),
+                this must be set to zero. Otherwise, can add errors to the matrix diagonal.
+
+        Returns:
+            (np.array): Covariance matrix of size (len(x1), len(x2))
+        """
+
+        amp = self.hparams["amp"]
+        length = self.hparams["length"]
+
+        X1 = np.array([x1]).T
+        X2 = np.array([x2]).T
+        dist = cdist(X1, X2, "sqeuclidean")
+
+        K = amp**2 * np.exp(-dist / (length**2))
+
+        if K.shape[0] == K.shape[1]:
+            K += (errors**2) * np.eye(K.shape[0])
+
+        self.covmatrix = K
+        return K
+
+
+class QuasiPer(Kernel):
+    """
+    The quasi periodic kernel
+    .
+    An element, :math:`C_{ij}`, of the quasi periodic kernel matrix is:
+
+    .. math::
+
+        C_{ij} = \\eta_{amp}^2 * exp( \\frac{ -|t_i - t_j|^2 }{ \\eta_{explength}^2 } -
+                 \\frac{ \\sin^2(\\frac{ \\pi|t_i-t_j| }{ \\eta_{per} } ) }{ 2\\eta_{perlength}^2 } )
+
+    Args:
+        hyperparams (dict): dictionary of the GP hyperparameters
+            of this kernel containing ['amp*'], ['explength*'], ['per*'], and ['perlength*'] keys.
+    """
+
+    @property
+    def name(self):
+        return "QuasiPeriodic"
+
+    def __init__(self, hyperparams):
+        self.covmatrix = None
+        self.hparams = {}
+
+        assert (
+            len(hyperparams) == 4
+        ), "QuasiPer requires exactly 4 hyperparameters with names 'amp*', 'explength*', 'per*', and 'perlength*'."
+
+        for key, val in hyperparams.items():
+            if key.startswith("amp"):
+                self.hparams["amp"] = val
+            elif key.startswith("explength"):
+                self.hparams["explength"] = val
+            elif key.startswith("per") and not "length" in key:
+                self.hparams["per"] = val
+            elif key.startswith("perlength"):
+                self.hparams["perlength"] = val
+
+        for param in ["amp", "explength", "per", "perlength"]:
+            if param not in self.hparams:
+                raise ValueError(f"QuasiPer requires hyperparameter {param}.")
+
+    def __repr__(self):
+        amp = self.hparams["amp"]
+        explength = self.hparams["explength"]
+        per = self.hparams["per"]
+        perlength = self.hparams["perlength"]
+        return "QuasiPeriodic Kernel with amp: {}, explength: {}, per: {}, perlength: {}".format(
+            amp, explength, per, perlength
         )
+
+    def calc_covmatrix(self, x1, x2, errors=0.0, **kwargs):
+        """
+        Compute the full covariance matrix between x1 and x2
+
+        Args:
+            x1, x2 (np.arrays): Points to calculate covariance matrix at.
+            errors (float or np.array): If the covariance matrix is non-square (x1 and x2 are not the same length),
+                this must be set to zero. Otherwise, can add errors to the matrix diagonal.
+
+        Returns:
+            (np.array): Covariance matrix of size (len(x1), len(x2))
+        """
+
+        amp = self.hparams["amp"]
+        explength = self.hparams["explength"]
+        per = self.hparams["per"]
+        perlength = self.hparams["perlength"]
+
+        X1 = np.array([x1]).T
+        X2 = np.array([x2]).T
+
+        dist = cdist(X1, X2, "euclidean")
+        sq_dist = cdist(X1, X2, "sqeuclidean")
+
+        K = np.array(
+            amp**2
+            * np.exp(-sq_dist / (explength**2))
+            * np.exp((-np.sin(np.pi * dist / per) ** 2.0) / (2.0 * perlength**2))
+        )
+
+        if K.shape[0] == K.shape[1]:
+            K += (errors**2) * np.eye(K.shape[0])
+
+        self.covmatrix = K
+        return K

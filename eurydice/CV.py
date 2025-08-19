@@ -1,263 +1,430 @@
 import numpy as np
 import pandas as pd
 import eurydice.kepler as kepler
-import eurydice.plot as plot
-import eurydice.kernel as kernel
+import scipy
+from scipy.stats import norm
+from eurydice.kernel import Kernel
+
+# import eurydice.plot as plot
+import plot
 import matplotlib.pyplot as plt
 
 
-def split(data, train_split, random=True):
-    """
-    Splits data into a training set and test set to perform cross validation
-
-    Args:
-        data (dataframe): a dataframe containing timestamps, RV measurements, RV errors, and instrument info
-        train_split (float): number from 0 to 1 (inclusive), the fraction of data that will be split into the training set. If split does not divide data into whole numbers, the training split will be rounded down.
-        random (bool): whether or not to choose the training set from random. Defaults to True. If set to False, the training set will chosen from the first fraction of data.
-
-    Returns:
-        training_data (dataframe), test_data (dataframe): two dataframes split from input data into a training and test set
-    """
-
-    if not isinstance(data, pd.DataFrame):
-        raise TypeError("The input data must be organized as a pandas DataFrame.")
-
-    if (train_split < 0) or (train_split > 1):
-        raise ValueError(
-            f"The train_split value must be between 0 and 1 (inclusive). Your input train_split value was {train_split}"
-        )
-
-    n_data = len(data)
-
-    if random:
-        training_mask = np.random.choice(
-            n_data, size=int(train_split * n_data), replace=False
-        )
-
-    else:
-        training_mask = np.arange(int(train_split * n_data))
-
-    test_mask = np.setdiff1d(np.arange(n_data), training_mask)
-
-    training_data = data.iloc[training_mask]
-    training_data.reset_index(drop=True, inplace=True)
-
-    test_data = data.iloc[test_mask]
-    test_data.reset_index(drop=True, inplace=True)
-
-    return training_data, test_data
-
-
-##### CROSSVALIDATION OBJECT ######
 class CrossValidation:
     """
-    Args:
-        training_data (dataframe): a dataframe containing the times, rv measurements, rv errors, and instruments information of the training set
-        test_data (dataframe): a dataframe containing the times, rv measurements, rv errors, and instruments information of the test set
-        orbit_params (tuple or list of tuples): (transit time, period, eccentricity, omega, keplerian semi-amplitude) per planet
-        inst_params (dict): a dictionary of lists holding the gamma, jitter, and GP amplitudes for each instrument present in the data
-        kernel (object): describes the covariance between two points. If none given, uses the defaultKernel
+    A class for running and analyzing Gaussian Process-based cross validation on radial velocity data.
+
+        Args:
+        training_data (pd.DataFrame): Contains 'times', 'rv', 'err', 'inst' columns for conditioning the GP.
+        test_data (pd.DataFrame): Contains 'times', 'rv', 'err', 'inst' columns for testing in cross-validation.
+        inst_params (dict): Dictionary of {instrument: [gamma, jitter]}.
+        kernel (eurydice.kernel object): Kernel object used for computing the GP covariance matrices.
+        include_keplerian (bool): Whether or not to use the Keplerian signals of the planet(s) as your GP's mean function. Defaults to False.
+        orbit_params (dict of dicts, optional): Dictionary of per-planet parameters.
+            If include_keplerian is True, this must be included.
+            Each planet's parameters must include keys: 'T0', 'P', 'e', 'omega', 'K'.
     """
 
     def __init__(
         self,
         training_data,
         test_data,
-        orbit_params,
         inst_params,
-        kernel=kernel.defaultKernel(),
+        kernel,
+        include_keplerian=False,
+        orbit_params=None,
     ):
-        self.orbit_params = orbit_params
+        # check data provided in correct format
+        self._validate_dataframe(training_data, "training_data")
+        self._validate_dataframe(test_data, "test_data")
+
+        self.training_data = training_data.copy()
+        self.test_data = test_data.copy()
+
+        # check that all instrumental parameters included for both sets
+        all_instruments = set(self.training_data["inst"]).union(
+            set(self.test_data["inst"])
+        )
+        missing_instruments = all_instruments - set(inst_params.keys())
+        if missing_instruments:
+            raise ValueError(
+                f"inst_params missing parameters for instrument(s): {missing_instruments}"
+            )
         self.inst_params = inst_params
+
+        # verify kernel is a eurydice kernel
+        if not isinstance(kernel, Kernel) or not kernel.__class__.__module__.startswith(
+            "eurydice.kernels"
+        ):
+            raise TypeError("Kernel must inherit from eurydice.kernels.Kernel.")
+
         self.kernel = kernel
 
-        ## check training_data for proper input type and requirements
-        if not isinstance(training_data, pd.DataFrame):
-            raise TypeError(
-                "The input training data must be organized as a pandas DataFrame."
-            )
+        # check for Keplerian and orbital parameters
+        self.include_keplerian = include_keplerian
 
-        for column in ["times", "rv", "err", "inst"]:
-            if column not in training_data:
-                raise ValueError(
-                    f"The input dataframe does not have the required columns needed. The training data is missing a(n) {column} column."
+        if include_keplerian and orbit_params is None:
+            raise ValueError("orbit_params must be specified to include Keplerian.")
+
+        if orbit_params is not None:
+            if not isinstance(orbit_params, dict):
+                raise TypeError(
+                    "orbit_params must be a dictionary with one entry per planet."
                 )
 
-        self.training_times = training_data["times"].to_numpy()
-        self.training_rvs = training_data["rv"].to_numpy()
-        self.training_errors = training_data["err"].to_numpy()
-        self.training_insts = training_data["inst"].to_numpy()
+            for planet, params in orbit_params.items():
+                if not isinstance(params, dict):
+                    raise TypeError(
+                        f"Orbit parameters for {planet} must be organized in a dictionary."
+                    )
 
-        ## check test_data for proper input type and requirements
-        if not isinstance(test_data, pd.DataFrame):
-            raise TypeError(
-                "The input test data must be organized as a pandas DataFrame."
-            )
+                required_keys = {"T0", "P", "e", "omega", "K"}
+                if set(params.keys()) != required_keys:
+                    raise ValueError(
+                        f"Orbit parameters for {planet} must include these keys: {required_keys}"
+                    )
+        self.orbit_params = orbit_params
 
-        for column in ["times", "rv", "err", "inst"]:
-            if column not in test_data:
-                raise ValueError(
-                    f"The input dataframe does not have the required columns needed. The test data is missing a(n) {column} column."
-                )
+        # flags
+        self._gp_has_conditioned = False
+        self._cv_has_run = False
 
-        self.test_times = test_data["times"].to_numpy()
-        self.test_rvs = test_data["rv"].to_numpy()
-        self.test_errors = test_data["err"].to_numpy()
-        self.test_insts = test_data["inst"].to_numpy()
+    def _validate_dataframe(self, df, name):
+        """
+        Method to validate input DataFrame format.
+
+        Raises:
+            TypeError: If df is not a pandas DataFrame.
+            ValueError: If required columns are missing.
+        """
+        required_cols = ["times", "rv", "err", "inst"]
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"{name} must be a pandas DataFrame.")
+        missing = [col for col in required_cols if col not in df]
+        if missing:
+            raise ValueError(f"{name} is missing columns: {missing}")
+
+    def __repr__(self):
+        planets = list(self.orbit_params.keys()) if self.orbit_params else []
+        kernel_name = self.kernel.name
+
+        return (
+            f"<CrossValidation | "
+            f"Training: {len(self.training_data)} pts, "
+            f"Test: {len(self.test_data)} pts, "
+            f"Instruments: {list(self.inst_params.keys())}, "
+            f"Include Keplerian?: {self.include_keplerian}, "
+            f"Planets: {len(planets)} ({', '.join(planets) if planets else 'none'}), "
+            f"Kernel: {kernel_name}>"
+        )
 
     def calc_total_planetary_signal(self, times):
         """
-        Computes the combined radial velocity signals of all transiting exoplanets in the star system
+        Computes the combined radial velocity signal of all exoplanets provided in orbit_params.
 
         Args:
-            times (np.array): set of times to calculate the planetary signal for
+            times (np.array): Times to calculate the planetary signal at
 
         Returns:
-            np.array: total radial velociy signal of the system at given times
+            (np.array): Total radial velociy signal of the system at given times
         """
-        ## check for proper input type
-        if (not isinstance(self.orbit_params, list)) and (
-            not isinstance(self.orbit_params, tuple)
-        ):
-            raise TypeError(
-                "Your orbital parameters are not given in the correct format. A single planet's parameters must be given in a tuple, and multiple planets should have their parameters given as a list of parameter tuples per planet."
+        if self.orbit_params is None:
+            raise RuntimeError(
+                "Orbit parameters must be provided in intialization to compute planetary signal."
             )
 
-        ## check for multiple planets
-        if isinstance(self.orbit_params, list):
+        total_signal = np.zeros_like(times)
 
-            total_rv_signal = np.zeros(len(times))
-
-            for planet_params in self.orbit_params:
-                if not isinstance(planet_params, tuple):
-                    raise TypeError(
-                        f"One of your planets does not have its parameters given as a tuple: {planet_params}"
-                    )
-
-                if len(planet_params) != 5:
-                    raise ValueError(
-                        f"Your orbital parameters should have 5 values per tuple: (transit time, period, eccentricity, omega, keplerian semi-amplitude). One of your planet's tuples has {len(planet_params)} parameters given: {planet_params}"
-                    )
-
-                total_rv_signal += kepler.calc_keplerian_signal(times, *planet_params)
-            return total_rv_signal
-
-        ## for singular planets
-        elif isinstance(self.orbit_params, tuple):
-            if len(self.orbit_params) != 5:
-                raise ValueError(
-                    f"Your orbital parameters tuple should have 5 values: (transit time, period, eccentricity, omega, keplerian semi-amplitude). Your input orbit parameter tuple has {len(self.orbit_params)} parameters given: {self.orbit_params}"
-                )
-            return kepler.calc_keplerian_signal(times, *self.orbit_params)
-
-    def GP_predict(self, times_predict, include_keplerian=True, inst=None):
-        """
-        Performs Gaussian Process regression conditioned on the training set of data to predict values at new points
-
-        Args:
-            times_predict (np.array): set of times for the GPR to predict values for
-            include_keplerian (bool): whether or not to include planetary signal as mean function. Defaults to True.
-            inst (str): which instrument parameters the GP is use in its prediction. If none passed, takes in the parameters of the first instrument given in the inst_params dictionary.
-
-        Returns:
-            predictive_means, predictive_variances (np.arrays): mean and variance values for times you want the GP to predict
-        """
-        if inst is None:
-            predict_gamma = self.inst_params[next(iter(self.inst_params))][0]
-
-        else:
-            if inst not in self.inst_params:
-                raise ValueError(
-                    "This instrument does not exist in your inst_params dictionary."
-                )
-            else:
-                predict_gamma = self.inst_params[inst][0]
-
-        gamma_list = []
-        jitters_list = []
-        for inst in self.training_insts:
-            gamma_list.append(self.inst_params[inst][0])
-            jitters_list.append(self.inst_params[inst][1])
-
-        training_gamma = np.asarray(gamma_list)
-        training_jitter = np.asanyarray(jitters_list)
-
-        if include_keplerian:
-            mean_function = (
-                self.calc_total_planetary_signal(self.training_times) + training_gamma
+        # add signal per planet
+        for params in self.orbit_params.values():
+            total_signal += kepler.calc_keplerian_signal(
+                times,
+                params["T0"],
+                params["P"],
+                params["e"],
+                params["omega"],
+                params["K"],
             )
-            mean_function_predict = (
-                self.calc_total_planetary_signal(times_predict) + predict_gamma
-            )
-        else:
-            mean_function = np.zeros_like(self.training_times) + training_gamma
-            mean_function_predict = np.zeros_like(times_predict) + predict_gamma
 
-        tot_train_error = np.sqrt((self.training_errors) ** 2 + (training_jitter) ** 2)
+        return total_signal
+
+    def condition(self):
+        """
+        Conditions the Gaussian Process using the set of training data provided.
+        """
+        times = self.training_data["times"].to_numpy()
+        rvs = self.training_data["rv"].to_numpy()
+        errors = self.training_data["err"].to_numpy()
+        insts = self.training_data["inst"].to_numpy()
+
+        # grab instrument specific parameters for each training point
+        gammas = np.array([self.inst_params[inst][0] for inst in insts])
+        jitters = np.array([self.inst_params[inst][1] for inst in insts])
+
+        mean = (
+            self.calc_total_planetary_signal(times) + gammas
+            if self.include_keplerian
+            else gammas
+        )
+
+        total_err = np.sqrt(errors**2 + jitters**2)
 
         K = self.kernel.calc_covmatrix(
-            self.training_times, self.training_times
-        ) + tot_train_error**2 * np.identity(len(self.training_times))
+            times, times, errors=total_err, inst1=insts, inst2=insts
+        )  # kernel may or may not use instrumental info, depending if the kernel is instrumental aware
 
-        K_star = self.kernel.calc_covmatrix(self.training_times, times_predict)
+        residual = rvs - mean
 
-        K_doublestar = self.kernel.calc_covmatrix(times_predict, times_predict)
+        # attempt to calculate using cholseky decomp, revert to manual code if not
+        try:
+            L = np.linalg.cholesky(K)
+            self._gp_conditioning = {
+                "K": K,
+                "L": L,
+                "residual": residual,
+            }
+            self._gp_has_conditioned = True
+        except np.linalg.LinAlgError:
+            print("Cholesky failed. Falling back to matrix inverse.")
+            try:
+                K_inv = np.linalg.inv(K)
+            except np.linalg.LinAlgError:
+                raise RuntimeError("Inverse could not be computed.")
 
-        predictive_means = mean_function_predict + np.linalg.multi_dot(
-            [
-                np.transpose(K_star),
-                np.linalg.inv(K),
-                (self.training_rvs - mean_function),
-            ]
+            self._gp_conditioning = {
+                "K": K,
+                "K_inv": K_inv,
+                "residual": residual,
+            }
+            self._gp_has_conditioned = True
+
+    def predict(self, times_predict, inst_predict):
+        """
+        Performs Gaussian Process regression conditioned on the training set of data to predict values at new points.
+
+        Args:
+            times_predict (np.array): Set of times for the GP to predict values at.
+            inst_predict (str or np.array): Instrument(s) corresponding to the data you'd like to predict for.
+                If a string is provided, uses the same instrument to predict at all times.
+                If an array is passed, it must be the same length as times_predict.
+
+        Returns:
+            (np.array, np.array): predictive means, predictive variances
+        """
+        if not self._gp_has_conditioned:
+            raise RuntimeError("You must run 'condition' before predicting!")
+
+        if isinstance(inst_predict, str):
+            inst_predict = np.array([inst_predict] * len(times_predict))
+        else:
+            inst_predict = np.array(inst_predict)
+
+        if len(times_predict) != len(inst_predict):
+            raise ValueError("times_predict and inst_predict must be the same length.")
+
+        # checks if the GP is trying to predict for an instrument that has no defined instrumental parameters
+        unique_insts = np.unique(inst_predict)
+        missing = set(unique_insts) - set(self.inst_params.keys())
+        if missing:
+            raise ValueError(f"Instrument(s) {missing} not found in inst_params.")
+
+        gammas_predict = np.array([self.inst_params[inst][0] for inst in inst_predict])
+
+        if self.include_keplerian:
+            mean_predict = (
+                self.calc_total_planetary_signal(times_predict) + gammas_predict
+            )
+        else:
+            mean_predict = gammas_predict
+
+        K_star = self.kernel.calc_covmatrix(
+            self.training_data["times"].to_numpy(),
+            times_predict,
+            errors=0.0,
+            inst1=self.training_data["inst"].to_numpy(),
+            inst2=inst_predict,
         )
 
-        predictive_covariances = np.subtract(
-            K_doublestar,
-            np.linalg.multi_dot([np.transpose(K_star), np.linalg.inv(K), K_star]),
+        K_doublestar = self.kernel.calc_covmatrix(
+            times_predict,
+            times_predict,
+            errors=0.0,
+            inst1=inst_predict,
+            inst2=inst_predict,
         )
+
+        residual = self._gp_conditioning["residual"]
+        if "L" in self._gp_conditioning:  # calculate using cholesky decomp
+            L = self._gp_conditioning["L"]
+            y = scipy.linalg.solve_triangular(L, residual, lower=True)
+            alpha = scipy.linalg.solve_triangular(L.T, y, lower=False)
+            predictive_means = mean_predict + np.transpose(K_star) @ alpha
+
+            v = scipy.linalg.solve_triangular(L, K_star, lower=True)
+            predictive_covariances = K_doublestar - np.transpose(v) @ v
+        else:  # if cholseky wasnt computed in condition, try manual
+            K_inv = self._gp_conditioning["K_inv"]
+            predictive_means = mean_predict + np.transpose(K_star) @ (K_inv @ residual)
+            predictive_covariances = K_doublestar - np.transpose(K_star) @ (
+                K_inv @ K_star
+            )
 
         predictive_variances = np.diag(predictive_covariances)
 
         return predictive_means, predictive_variances
 
-    def run_CV(self, include_keplerian=True, inst=None):
+    def run_CV(self):
         """
-        Args:
-            include_keplerian (bool): whether or not to include planetary signal as mean function. Defaults to True.
-            inst (str): which instrument parameters the GP is use in its prediction. If none passed, takes in the parameters of the first instrument given in the inst_params dictionary.
+        Run cross-validation by determining how well the model conditioned on the training set predicts the values of the test set.
+        """
+        if not self.gp_has_conditioned:
+            self.condition()
+
+        all_times = np.concatenate(
+            [
+                self.training_data["times"].to_numpy(),
+                self.test_data["times"].to_numpy(),
+            ]
+        )
+
+        all_insts = np.concatenate(
+            [
+                self.training_data["inst"].to_numpy(),
+                self.test_data["inst"].to_numpy(),
+            ]
+        )
+
+        CV_means, CV_variances = self.predict(
+            times_predict=all_times,
+            inst_predict=all_insts,
+        )
+
+        # calculate normalized residuals per data point
+
+        N_train = len(self.training_data["times"])
+
+        test_resid = (self.test_data["rv"] - CV_means[N_train:]) / np.sqrt(
+            CV_variances[N_train:] + self.test_data["err"] ** 2
+        )
+        train_resid = (self.training_data["rv"] - CV_means[:N_train]) / np.sqrt(
+            CV_variances[:N_train] + self.training_data["err"] ** 2
+        )
+
+        all_resids = np.concatenate([train_resid, test_resid])
+
+        # fit normal distributions to residuals
+        mu_train, std_train = norm.fit(train_resid)
+        mu_test, std_test = norm.fit(test_resid)
+
+        # dataframe with detailed per-point info
+        results_df = pd.DataFrame(
+            {
+                "time": all_times,
+                "inst": all_insts,
+                "pred_mean": CV_means,
+                "pred_variance": CV_variances,
+                "normalized_residual": all_resids,
+                "data_split": ["train"] * N_train
+                + ["test"] * (len(all_times) - N_train),
+            }
+        )
+
+        self._CV_results = {
+            "detailed_results": results_df,
+            "train_residual_mean": mu_train,
+            "train_residual_std": std_train,
+            "test_residual_mean": mu_test,
+            "test_residual_std": std_test,
+        }
+
+        self._cv_has_run = True
+
+    def get_CV_results(self):
+        """
+        Get cross-validation results.
 
         Returns:
-            CV_means, CV_variances (np.arrays): mean and variance values of GP ran on total set of data
-        """
-        all_times = np.concatenate((self.training_times, self.test_times))
-        CV_means, CV_variances = self.GP_predict(all_times, include_keplerian, inst)
+            tuple: (results_df, residual_stats) where
+                results_df (pd.DataFrame): Detailed results DataFrame.
+                residual_stats (dict): {
+                    "train_residual_mean": float,
+                    "train_residual_std": float,
+                    "test_residual_mean": float,
+                    "test_residual_std": float,
+                }
 
-        return CV_means, CV_variances
-
-    def plot(self, times_predict, include_keplerian=True, inst=None):
+        Raises:
+            RuntimeError: If 'run_CV' hasn't been called yet.
         """
-        Wrapper for plot.Plot
+        if not self.cv_has_run:
+            raise RuntimeError("'run_CV' hasn't been called yet!")
+
+        results_df = self._CV_results.get("detailed_results_df")
+        residual_stats = {
+            "train_residual_mean": self._CV_results.get("train_residual_mean"),
+            "train_residual_std": self._CV_results.get("train_residual_std"),
+            "test_residual_mean": self._CV_results.get("test_residual_mean"),
+            "test_residual_std": self._CV_results.get("test_residual_std"),
+        }
+
+        return results_df, residual_stats
+
+    def plot_CV(
+        self,
+        include_Gaussian=False,
+        save_path=None,
+        colors=None,
+        labels=None,
+        prediction_plot_axis_kwargs=None,
+        histogram_axis_kwargs=None,
+        legend_kwargs=None,
+    ):
+        """
+        Plot CV results in a multi-panel plot with prediction + residuals on the left and histogram on the right.
 
         Args:
-            times_predict (np.array): set of times for the GPR to predict values for
-            include_keplerian (bool): whether or not to include planetary signal as mean function in GP. Defaults to True.
-            inst (str): which instrument parameters the GP is use in its prediction. If none passed, takes in the parameters of the first instrument given in the inst_params dictionary.
+            include_Gaussian (bool): If True, overlay Gaussian curve fits on histogram. Defaults to False.
+            save_path (str or Path, optional): If provided, saves the figure to given path.
+            colors (dict, optional): Custom color mapping for 'train' and 'test'.
+            labels (dict, optional): Custom label mapping for 'train' and 'test'.
+            prediction_plot_axis_kwargs (dict, optional): Axis settings for prediction + residual panel.
+            histogram_axis_kwargs (dict, optional): Axis settings for histogram.
+            legend_kwargs (dict, optional): Custom legend settings.
 
         Returns:
-            matplotlib.pyplot.Figure
+            (matplotlib.figure.Figure)
         """
-        return plot.plot_cv(self, times_predict, include_keplerian)
 
-    def histogram(self, include_Gaussian=False, include_keplerian=True, inst=None):
-        """
-        Wrapper for plot.Histogram
+        fig = plt.figure(figsize=(15, 7))
+        gs = plt.GridSpec(2, 2, width_ratios=[3, 2], height_ratios=[2, 1], figure=fig)
 
-        Args:
-            include_Gaussian (bool): whether or not to fit and plot Gaussians to residuals. Defaults to False.
-            include_keplerian (bool): whether or not to include planetary signal as mean function in CV. Defaults to True.
-            inst (str): which instrument parameters the CV is use in its prediction. If none passed, takes in the parameters of the first instrument given in the inst_params dictionary.
+        ax_pred = fig.add_subplot(gs[0, 0])
+        ax_resid = fig.add_subplot(gs[1, 0], sharex=ax_pred)
+        ax_hist = fig.add_subplot(gs[:, 1])
 
-        Returns:
-            matplotlib.pyplot.Figure
-        """
-        return plot.plot_histogram(self, include_Gaussian, include_keplerian, inst=inst)
+        plot.plot_prediction_and_residuals(
+            self,
+            colors=colors,
+            labels=labels,
+            axis_kwargs=prediction_plot_axis_kwargs,
+            legend_kwargs=legend_kwargs,
+            ax1=ax_pred,
+            ax2=ax_resid,
+        )
+
+        plot.plot_histogram(
+            self,
+            include_Gaussian=include_Gaussian,
+            colors=colors,
+            labels=labels,
+            axis_kwargs=histogram_axis_kwargs,
+            legend_kwargs=legend_kwargs,
+            ax=ax_hist,
+        )
+
+        plt.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, bbox_inches="tight", dpi=300)
+
+        return fig

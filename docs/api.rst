@@ -7,6 +7,7 @@ API
    :titlesonly:     
    
    CV
+   input
    kepler
-   plot
    kernel
+   plot
