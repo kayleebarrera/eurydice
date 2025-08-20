@@ -52,11 +52,11 @@ class CrossValidation:
             )
         self.inst_params = inst_params
 
-        # verify kernel is a eurydice kernel
-        if not isinstance(kernel, Kernel) or not kernel.__class__.__module__.startswith(
-            "eurydice.kernels"
-        ):
-            raise TypeError("Kernel must inherit from eurydice.kernels.Kernel.")
+        # TODO verify kernel is a eurydice kernel (?)
+        # if not isinstance(kernel, Kernel) or not kernel.__class__.__module__.startswith(
+        #     "eurydice.kernels"
+        # ):
+        #     raise TypeError("Kernel must inherit from eurydice.kernels.Kernel.")
 
         self.kernel = kernel
 
@@ -277,7 +277,7 @@ class CrossValidation:
         """
         Run cross-validation by determining how well the model conditioned on the training set predicts the values of the test set.
         """
-        if not self.gp_has_conditioned:
+        if not self._gp_has_conditioned:
             self.condition()
 
         all_times = np.concatenate(
@@ -356,10 +356,10 @@ class CrossValidation:
         Raises:
             RuntimeError: If 'run_CV' hasn't been called yet.
         """
-        if not self.cv_has_run:
+        if not self._cv_has_run:
             raise RuntimeError("'run_CV' hasn't been called yet!")
 
-        results_df = self._CV_results.get("detailed_results_df")
+        results_df = self._CV_results.get("detailed_results")
         residual_stats = {
             "train_residual_mean": self._CV_results.get("train_residual_mean"),
             "train_residual_std": self._CV_results.get("train_residual_std"),
@@ -395,6 +395,7 @@ class CrossValidation:
             (matplotlib.figure.Figure)
         """
 
+        # create multi panel axes
         fig = plt.figure(figsize=(15, 7))
         gs = plt.GridSpec(2, 2, width_ratios=[3, 2], height_ratios=[2, 1], figure=fig)
 

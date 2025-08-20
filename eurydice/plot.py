@@ -49,14 +49,12 @@ def plot_prediction_and_residuals(
 
     plot_times = np.linspace(xmin, xmax, int(1e4))
 
-    if not cv_obj.cv_has_run:
+    if not cv_obj._cv_has_run:
         raise RuntimeError("You must run 'run_CV' before plotting!")
-
-    CV_means, _, CV_inst = cv_obj.get_CV_results()
 
     # predictions panel
     pred_instrument = np.unique(cv_obj.test_data["inst"])[0]
-    print("Plotting for ", pred_instrument)
+    print("Plotting for", pred_instrument)
 
     plot_means, plot_variance = cv_obj.predict(plot_times, inst_predict=pred_instrument)
     pred_std_dev = np.sqrt(plot_variance)
@@ -128,8 +126,13 @@ def plot_prediction_and_residuals(
     ax1.legend(**legend_kwargs)
 
     # residuals panel
-    train_resids = train["rv"] - CV_means[: len(train)]
-    test_resids = test["rv"] - CV_means[len(train) :]
+    results_df, _ = cv_obj.get_CV_results()
+
+    CV_means = results_df["pred_mean"]
+
+    train_resids = train["rv"].to_numpy() - CV_means[: len(train)].to_numpy()
+    test_resids = test["rv"].to_numpy() - CV_means[len(train) :].to_numpy()
+
     ax2.axhline(0, ls="--", color="k", lw=0.8)
     ax2.errorbar(
         train["times"], train_resids, train["err"], fmt="o", color=colors["train"]
@@ -176,21 +179,26 @@ def plot_histogram(
     axis_kwargs = {**default_axis_kwargs, **(axis_kwargs or {})}
     legend_kwargs = {**default_legend_kwargs, **(legend_kwargs or {})}
 
-    if not cv_obj.cv_has_run:
+    if not cv_obj._cv_has_run:
         raise RuntimeError("You must run 'run_CV' before plotting!")
 
-    CV_means, CV_variances, _ = cv_obj.get_CV_results()
+    # grab cv results
+    results_df, residual_stats = cv_obj.get_CV_results()
+
     N_train = len(cv_obj.training_data)
 
-    test_resid = (cv_obj.test_data["rv"] - CV_means[N_train:]) / np.sqrt(
-        CV_variances[N_train:] + cv_obj.test_data["err"] ** 2
+    test_resids = results_df["normalized_residual"][N_train:]
+    train_resids = results_df["normalized_residual"][:N_train]
+
+    mu_train, std_train = (
+        residual_stats["train_residual_mean"],
+        residual_stats["train_residual_std"],
     )
-    train_resid = (cv_obj.training_data["rv"] - CV_means[:N_train]) / np.sqrt(
-        CV_variances[:N_train] + cv_obj.training_data["err"] ** 2
+    mu_test, std_test = (
+        residual_stats["test_residual_mean"],
+        residual_stats["test_residual_std"],
     )
 
-    mu_train, std_train = norm.fit(train_resid)
-    mu_test, std_test = norm.fit(test_resid)
     labels["train"] += f", $\sigma$ = {std_train:.2f}"
     labels["test"] += f", $\sigma$ = {std_test:.2f}"
 
@@ -200,7 +208,7 @@ def plot_histogram(
         fig = ax.figure
 
     ax.hist(
-        train_resid,
+        train_resids,
         bins=25,
         range=(-5, 5),
         color=colors["train"],
@@ -210,7 +218,7 @@ def plot_histogram(
     )
 
     ax.hist(
-        test_resid,
+        test_resids,
         bins=25,
         range=(-5, 5),
         color=colors["test"],
@@ -222,8 +230,6 @@ def plot_histogram(
 
     if include_Gaussian:
         x_vals = np.linspace(-5, 5, 500)
-        mu_train, std_train = norm.fit(train_resid)
-        mu_test, std_test = norm.fit(test_resid)
 
         ax.plot(
             x_vals,
