@@ -18,18 +18,18 @@ eurydice
 
    <div style="margin-top: 20px;"></div>
 
-.. admonition:: July 2025 Note
+.. admonition:: AAS 247 Note
 
-   (👋 If you're here from my poster at ERES or EPRV6, thanks for stopping by!)
+   (👋 If you're here from my iPoster at AAS, thanks for stopping by!)
 
-   I'm currently in the process of drafting a paper on ``eurydice`` and our first test case, which means there will probably be a lot of changes coming soon as I refurbish my current code. 
+   My paper on ``eurydice`` is currently in review for publication in The Astronomical Journal 🎉 - I'm currently working to refurbish some code, add documenation where needed, and set up some tutorials in the meantime. Stay tuned!
 
    Any particular suggestions or feedback? Feel free to reach out!
 
-Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process stellar activity models. 
+Hello there! Welcome to the documentation for ``eurydice``, a Python package for performing cross-validation on Gaussian Process models of radial velocity data. 
 
-``eurydice`` is actively being developed in a `public repository on GitHub <https://github.com/kaybarr4/eurydice>`_. If you find a bug, want to request a feature, etc. please
-create an `issue on GitHub <https://github.com/kaybarr4/eurydice/issues>`_.  
+``eurydice`` is actively being developed in a `public repository on GitHub <https://github.com/kayleebarrera/eurydice>`_. If you find a bug, want to request a feature, etc. please
+create an `issue on GitHub <https://github.com/kayleebarrera/eurydice/issues>`_.  
 
 
 User Guide
@@ -39,13 +39,20 @@ User Guide
    :maxdepth: 2
 
    installation 
-   tutorial
+   tutorials
    api
-
 
 
 Changelog
 ++++++++++
+
+**0.5 (2026-1-06)**
+She's back!
+
+- added input module to easily format data for eurydice's CV method
+- added QuasiPeriodic and SquaredExponential kernels to kernel module
+- adjusted a lot of CrossValiation's methods to make it easier to use
+- updated plotting methods for more customization and an easy multipanel plot for CV results
 
 **0.4 (2024-8-16)**
 

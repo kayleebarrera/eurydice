@@ -1,3 +1,7 @@
+"""
+Test the eurydice.kepler module
+"""
+
 import numpy as np
 import eurydice.kepler as kepler
 import pytest
@@ -11,19 +15,15 @@ def test_kepler_solver():
     Test Kepler Solver by comparing the mean anomaly computed from
     kepler_solver output vs the input mean anomaly
     """
-    ## generate values
     M_anoms = np.linspace(0, 2.0 * np.pi, 100)
     eccs = np.linspace(0, 0.999999, 100)
 
     for eccentricity in eccs:
         ecc_array = eccentricity * np.ones_like(M_anoms)
         E_anoms = kepler.kepler_solver(M_anoms, ecc_array)
-        ## plug solutions into Kepler's equation
         calc_mm = E_anoms - eccentricity * np.sin(E_anoms)
 
         for meas, truth in zip(calc_mm, M_anoms):
-            # find difference between actual mean anomalies
-            # from the values calculated by Kepler's equation
             assert (meas - truth) == pytest.approx(0.0, abs=threshold)
 
 
@@ -40,7 +40,7 @@ def test_transit_to_periastron():
 
     Test case 3: standard orbit with random standard parameters
     """
-    ## set values for each test case, [t_transit, period, ecc, omega]
+
     params_list = [
         [58849, 4, 0, 0],
         [58849, 4, 0, np.pi / 2],
@@ -62,13 +62,8 @@ def test_calc_mean_anomaly():
     period = 4
     t_periastron = 55849
 
-    #### mean anomaly increases uniformly with time to 2pi per orbit
-    #### except for when orbit returns to periastron, where mean anom resets to 0
-
     true_mean_anoms = np.linspace(0, 2 * np.pi, num=49, endpoint=False)
-    true_mean_anoms = np.append(
-        true_mean_anoms, 0
-    )  ### 0 should be last value after one complete revolution
+    true_mean_anoms = np.append(true_mean_anoms, 0)
 
     meas_mean_anoms = kepler.calc_mean_anomaly(test_times, period, t_periastron)
 
@@ -117,3 +112,4 @@ if __name__ == "__main__":
     test_transit_to_periastron()
     test_calc_mean_anomaly()
     test_calc_true_anomaly()
+    print("Done!")
