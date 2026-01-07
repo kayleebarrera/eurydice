@@ -5,6 +5,7 @@ from scipy.stats import norm
 
 def plot_prediction_and_residuals(
     cv_obj,
+    inst_to_plot=None,
     colors=None,
     labels=None,
     axis_kwargs=None,
@@ -53,12 +54,22 @@ def plot_prediction_and_residuals(
         raise RuntimeError("You must run 'run_CV' before plotting!")
 
     # predictions panel
-    pred_instrument = np.unique(cv_obj.test_data["inst"])[0]
-    print("Plotting for", pred_instrument)
+    if inst_to_plot is not None:
+        print("Plotting for", inst_to_plot)
+        plot_means, plot_variance = cv_obj.predict(
+            plot_times, inst_predict=inst_to_plot
+        )
+        pred_std_dev = np.sqrt(plot_variance)
+        predictive_means_zero = plot_means - cv_obj.inst_params[inst_to_plot][0]
+    else:
+        pred_instrument = np.unique(cv_obj.test_data["inst"])[0]
+        print("Plotting for", pred_instrument)
 
-    plot_means, plot_variance = cv_obj.predict(plot_times, inst_predict=pred_instrument)
-    pred_std_dev = np.sqrt(plot_variance)
-    predictive_means_zero = plot_means - cv_obj.inst_params[pred_instrument][0]
+        plot_means, plot_variance = cv_obj.predict(
+            plot_times, inst_predict=pred_instrument
+        )
+        pred_std_dev = np.sqrt(plot_variance)
+        predictive_means_zero = plot_means - cv_obj.inst_params[pred_instrument][0]
 
     train = cv_obj.training_data
     test = cv_obj.test_data
@@ -70,19 +81,24 @@ def plot_prediction_and_residuals(
         fig.subplots_adjust(hspace=0)
 
     ax1.plot(
-        plot_times, predictive_means_zero, color="k", label="Mean Prediction", lw=1.5
-    )
-    ax1.fill_between(
         plot_times,
-        predictive_means_zero - pred_std_dev,
-        predictive_means_zero + pred_std_dev,
+        predictive_means_zero,
+        color="k",
+        label="Mean Prediction",
+        lw=1,
+        alpha=0.5,
+    )
+    ax2.fill_between(
+        plot_times,
+        -pred_std_dev,
+        pred_std_dev,
         color="gray",
         alpha=0.3,
     )
-    ax1.fill_between(
+    ax2.fill_between(
         plot_times,
-        predictive_means_zero - 2 * pred_std_dev,
-        predictive_means_zero + 2 * pred_std_dev,
+        -2 * pred_std_dev,
+        2 * pred_std_dev,
         color="lightgray",
         alpha=0.5,
     )
@@ -111,7 +127,7 @@ def plot_prediction_and_residuals(
         test["times"],
         test_rv_zero,
         test["err"],
-        fmt="^",
+        fmt="s",
         color=colors["test"],
         label=labels["test"],
     )
@@ -137,7 +153,7 @@ def plot_prediction_and_residuals(
     ax2.errorbar(
         train["times"], train_resids, train["err"], fmt="o", color=colors["train"]
     )
-    ax2.errorbar(test["times"], test_resids, test["err"], fmt="^", color=colors["test"])
+    ax2.errorbar(test["times"], test_resids, test["err"], fmt="s", color=colors["test"])
     ax2.set_xlabel(axis_kwargs["xlabel"], **axis_kwargs.get("xlabel_kwargs", {}))
     ax2.set_ylabel(
         axis_kwargs["residual_ylabel"], **axis_kwargs.get("residual_ylabel_kwargs", {})
@@ -170,6 +186,7 @@ def plot_histogram(
         "ylabel": "Density",
         "xlabel_kwargs": {"fontsize": 12},
         "ylabel_kwargs": {"fontsize": 12},
+        "xlim": None,
     }
     default_legend_kwargs = {"fontsize": 10, "loc": "best"}
 
@@ -207,10 +224,15 @@ def plot_histogram(
     else:
         fig = ax.figure
 
+    if axis_kwargs["xlim"] is not None:
+        xmin, xmax = axis_kwargs["xlim"]
+    else:
+        xmin, xmax = -5, 5
+
     ax.hist(
         train_resids,
         bins=25,
-        range=(-5, 5),
+        range=(xmin, xmax),
         color=colors["train"],
         alpha=0.5,
         label=labels["train"],
@@ -220,7 +242,7 @@ def plot_histogram(
     ax.hist(
         test_resids,
         bins=25,
-        range=(-5, 5),
+        range=(xmin, xmax),
         color=colors["test"],
         histtype="step",
         linewidth=1.5,
@@ -229,18 +251,21 @@ def plot_histogram(
     )
 
     if include_Gaussian:
-        x_vals = np.linspace(-5, 5, 500)
+        x_vals = np.linspace(xmin, xmax, 500)
+
+        train_pdf = norm.pdf(x_vals, mu_train, std_train)
+        test_pdf = norm.pdf(x_vals, mu_test, std_test)
 
         ax.plot(
             x_vals,
-            norm.pdf(x_vals, mu_train, std_train),
+            train_pdf,
             color=colors["train"],
             linestyle="-",
             alpha=0.6,
         )
         ax.plot(
             x_vals,
-            norm.pdf(x_vals, mu_test, std_test),
+            test_pdf,
             color=colors["test"],
             linestyle="--",
             alpha=0.6,

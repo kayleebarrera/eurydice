@@ -5,8 +5,7 @@ import scipy
 from scipy.stats import norm
 from eurydice.kernel import Kernel
 
-# import eurydice.plot as plot
-import plot
+import eurydice.plot as plot
 import matplotlib.pyplot as plt
 
 
@@ -14,7 +13,7 @@ class CrossValidation:
     """
     A class for running and analyzing Gaussian Process-based cross validation on radial velocity data.
 
-        Args:
+    Args:
         training_data (pd.DataFrame): Contains 'times', 'rv', 'err', 'inst' columns for conditioning the GP.
         test_data (pd.DataFrame): Contains 'times', 'rv', 'err', 'inst' columns for testing in cross-validation.
         inst_params (dict): Dictionary of {instrument: [gamma, jitter]}.
@@ -23,6 +22,7 @@ class CrossValidation:
         orbit_params (dict of dicts, optional): Dictionary of per-planet parameters.
             If include_keplerian is True, this must be included.
             Each planet's parameters must include keys: 'T0', 'P', 'e', 'omega', 'K'.
+
     """
 
     def __init__(
@@ -303,11 +303,15 @@ class CrossValidation:
 
         N_train = len(self.training_data["times"])
 
+        jitters = np.array([self.inst_params[inst][1] for inst in all_insts])
+
         test_resid = (self.test_data["rv"] - CV_means[N_train:]) / np.sqrt(
-            CV_variances[N_train:] + self.test_data["err"] ** 2
+            CV_variances[N_train:] + self.test_data["err"] ** 2 + jitters[N_train:] ** 2
         )
         train_resid = (self.training_data["rv"] - CV_means[:N_train]) / np.sqrt(
-            CV_variances[:N_train] + self.training_data["err"] ** 2
+            CV_variances[:N_train]
+            + self.training_data["err"] ** 2
+            + jitters[:N_train] ** 2
         )
 
         all_resids = np.concatenate([train_resid, test_resid])
@@ -344,14 +348,9 @@ class CrossValidation:
         Get cross-validation results.
 
         Returns:
-            tuple: (results_df, residual_stats) where
+            (results_df, residual_stats) where
                 results_df (pd.DataFrame): Detailed results DataFrame.
-                residual_stats (dict): {
-                    "train_residual_mean": float,
-                    "train_residual_std": float,
-                    "test_residual_mean": float,
-                    "test_residual_std": float,
-                }
+                residual_stats (dict of floats): Detailed statistics of the means and standard deviations of the training and test set residuals.
 
         Raises:
             RuntimeError: If 'run_CV' hasn't been called yet.
@@ -371,6 +370,7 @@ class CrossValidation:
 
     def plot_CV(
         self,
+        inst_to_plot=None,
         include_Gaussian=False,
         save_path=None,
         colors=None,
@@ -383,6 +383,7 @@ class CrossValidation:
         Plot CV results in a multi-panel plot with prediction + residuals on the left and histogram on the right.
 
         Args:
+            inst_predict (str or np.array): Instrument(s) corresponding to the data you'd like to predict for.
             include_Gaussian (bool): If True, overlay Gaussian curve fits on histogram. Defaults to False.
             save_path (str or Path, optional): If provided, saves the figure to given path.
             colors (dict, optional): Custom color mapping for 'train' and 'test'.
@@ -405,6 +406,7 @@ class CrossValidation:
 
         plot.plot_prediction_and_residuals(
             self,
+            inst_to_plot=inst_to_plot,
             colors=colors,
             labels=labels,
             axis_kwargs=prediction_plot_axis_kwargs,

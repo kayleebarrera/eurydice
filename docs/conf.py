@@ -19,12 +19,12 @@ sys.path.insert(0, os.path.abspath("./../eurydice"))
 # -- Project information -----------------------------------------------------
 
 project = "eurydice"
-copyright = "2025 Kaylee Barrera"
+copyright = "2026 Kaylee Barrera"
 author = "Kaylee Barrera"
 root_doc = "index"
 
 # The full version, including alpha/beta/rc tags
-release = "0.4"
+release = "0.5"
 
 
 # -- General configuration ---------------------------------------------------
@@ -32,7 +32,7 @@ release = "0.4"
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.napoleon"]
+extensions = ["sphinx.ext.autodoc", "sphinx.ext.napoleon", "nbsphinx"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -60,7 +60,7 @@ html_logo = "_static/eurydice_logo_color.svg"
 
 html_theme_options = {
     "path_to_docs": "docs",
-    "repository_url": "https://github.com/kaybarr4/eurydice",
+    "repository_url": "https://github.com/kayleebarrera/eurydice",
     "repository_branch": "main",
     "use_edit_page_button": True,
     "use_issues_button": True,

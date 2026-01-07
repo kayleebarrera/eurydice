@@ -1,4 +1,4 @@
-.. _api:
+.. _tutorials:
 
 Tutorials
 ==========================
@@ -11,3 +11,4 @@ Tutorials
    tutorials/input-formatting.ipynb
    tutorials/custom-kernel.ipynb
    tutorials/multi-inst.ipynb
+
